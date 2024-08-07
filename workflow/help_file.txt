@@ -1,0 +1,65 @@
+import os,sys
+
+from time import sleep
+
+ 
+
+		
+
+ 
+
+ncores=8
+
+ 
+
+ 
+
+running_command="./mast_sey_v06_gcc74"
+
+		
+
+for i in range(10,1000,25):
+
+	        os.system('rm tmp')
+
+		command="""ps axu | grep mast_sey_v06_gcc74 | awk -- '$11=="""+'"'+running_command+'"'+""" {print $11}' | wc  > tmp"""
+
+ 
+
+		#print command
+
+		os.system(command)
+
+		fl=open('tmp','r')
+
+		tx=fl.readlines()
+
+		fl.close()
+
+		nrun=int(tx[0].split()[0])
+
+		print "nrun",nrun
+
+ 
+
+		if nrun<ncores:
+
+ 
+
+		   outfile="out_"+str(i)+".log"
+
+		   command="./mast_sey_v06_gcc74  -e "+str(i)+" -m 100000 -dos > "+outfile+ " && cat "+outfile +" >> out_all.log &"
+
+		   print command
+
+		   os.system(command)
+
+ 
+
+		   #sleep(1)
+
+		else:
+
+		   #print "sleeping "
+
+		   sleep(10)
