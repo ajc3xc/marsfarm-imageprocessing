@@ -166,4 +166,5 @@ outputs/
 #config file for s3 bucket
 #DO NOT UNDER ANY CIRCUMSTANCES PUSH THE CONFIG FILE TO GITHUB
 **/*.cfg
+*.cfg
 **/.ipynb_checkpoints

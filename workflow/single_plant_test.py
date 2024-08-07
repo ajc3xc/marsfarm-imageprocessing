@@ -30,7 +30,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 config = configparser.ConfigParser()
 
 # Read the .cfg file
-config.read('/mnt/stor/ceph/csb/marsfarm/projects/aws_key/aws_key.cfg')
+config.read('/home/ubuntu/aws_key.cfg')
 
 # Accessing the values
 # Access a specific section
@@ -44,13 +44,14 @@ session = boto3.Session(
 config = BotoConfig(connect_timeout=120, read_timeout=300, retries={"max_attempts": 5, "mode": "standard"})
 s3 = session.client('s3', config=config, verify=False)
 
-def calculate_area(mask_folder: Path, filename: Path):
+plant_pixels, MayHavePlant = calculate_area(key)
+print(plant_pixels, MayHavePlant)
+
+def calculate_area(key: str):
     # Get the image object from S3
     image_folder = outputs_folder / "images" / Path(key).stem
     image_folder.mkdir(exist_ok=True, parents=True)
-    base_filename = image_folder / ("base_" + str(Path(key).name))
-    s3_object = s3.get_object(Bucket=bucket_name, Key=key)
-    
+    s3_object = s3.get_object(Bucket=bucket_name, Key=key)    
     #read image into numpy array
     #If you can't read it return 0
     try:
@@ -76,11 +77,6 @@ def calculate_area(mask_folder: Path, filename: Path):
     #load in image
     #using skimage for file import since cv2 wasn't working
     image_np = io.imread(str(filename))
-
-    #calculate total r, g, and b values for the image
-    sum_r = np.sum(image_np[:, :, 0])
-    sum_g = np.sum(image_np[:, :, 1])
-    sum_b = np.sum(image_np[:, :, 2])
 
     # Convert to HSV and LAB color spaces
     #HSV - Hue, Seperation, Value
@@ -120,11 +116,11 @@ def calculate_area(mask_folder: Path, filename: Path):
 
     #create labels for masks that may have plants, count number of objects
     number_of_plants = 0
-    if MayHavePlant:
-        labeled_mask = label(denoised_mask, connectivity=1)  # You can adjust connectivity (1 or 2)
+    #if MayHavePlant:
+        #labeled_mask = label(denoised_mask, connectivity=1)  # You can adjust connectivity (1 or 2)
 
         # Find the number of objects by ignoring the background (label 0)
-        number_of_plants = len(np.unique(labeled_mask)) - 1  # Subtract one for the background label
+       # number_of_plants = len(np.unique(labeled_mask)) - 1  # Subtract one for the background label
 
     #export masked and denoised image to file
     #cv2 only works with strings, not filepaths
@@ -134,7 +130,7 @@ def calculate_area(mask_folder: Path, filename: Path):
 
     # Here, you might want to save or further process the result_image
     # For demonstration, let's just return the number of white pixels in the mask
-    return plant_pixels, MayHavePlant, number_of_plants, sum_r, sum_g, sum_b
+    return plant_pixels, MayHavePlant
 
 
 

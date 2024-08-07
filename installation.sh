@@ -20,3 +20,5 @@ mamba env create --file enviornment/environment.yml
 
 # Cleanup: remove the installer
 rm Miniforge3.sh
+
+sudo apt update
