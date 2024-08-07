@@ -16,7 +16,7 @@ chmod +x Miniforge3.sh
 exec $SHELL
 
 # Create the environment from the provided YAML file
-mamba env create --file environment.yml
+mamba env create --file enviornment/environment.yml
 
 # Cleanup: remove the installer
 rm Miniforge3.sh

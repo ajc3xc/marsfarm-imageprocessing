@@ -9,12 +9,10 @@ detect_plant()
     conda activate plantenv_pcv4_jupyter
 
     #script test inputs
-    local bucket_name="mv1-production"
-    local folder_name="63fe89ab8ff20577fe003e76"
-    local outputs_superfolder="/mnt/stor/ceph/csb/marsfarm/projects/plant_analysis_full_run/outputs"
+    local outputs_superfolder="/mnt/stor/ceph/csb/marsfarm/projects/s3_lambda_test/outputs"
 
     #shows you what node jupyter lab is running on
-    python3 detect_plant.py $bucket_name $folder_name $outputs_superfolder
+    python3 detect_plant.py $outputs_superfolder
 )}
 
 export -f detect_plant
