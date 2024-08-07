@@ -1,19 +1,10 @@
-name: plantenv_pcv4_jupyter
+name: imageprocessing_minimal
 channels:
-  - bioconda
   - conda-forge
 dependencies:
-  #3.10 needed for plantcv v3.14.3
   - python=3.11
-  - jupyterlab
-  - ipympl
-  - pyarrow
-  - openpyxl
   - pandarallel
   - boto3
-  - tensorflow
   - pip
   - pip:
     - plantcv==4.2.1
-    - ultralytics
-    - ultralyticsplus
