@@ -22,3 +22,4 @@ mamba env create --file enviornment/environment.yml
 rm Miniforge3.sh
 
 sudo apt update
+sudo apt-get install ffmpeg libsm6 libxext6 -y

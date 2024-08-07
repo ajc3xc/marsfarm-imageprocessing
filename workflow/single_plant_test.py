@@ -5,18 +5,21 @@ import cv2
 import pandas as pd
 from pandarallel import pandarallel
 pandarallel.initialize(verbose=0)
-import matplotlib.pyplot as plt
-import seaborn as sns
 from pathlib import Path
 from functools import partial
 from datetime import datetime
 from time import mktime
 from skimage import morphology, io
 from skimage.measure import label
+from configparser import ConfigParser
+import boto3
+from botocore.client import Config as BotoConfig
+from botocore.exceptions import ClientError, ResponseStreamingError
+from PIL import Image, UnidentifiedImageError, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+from io import BytesIO
 
-from plantcv import plantcv as pcv
-
-outputs_superfolder = Path(sys.argv[1])
+outputs_folder = Path(sys.argv[1])
 
 bucket_name = "mv1-production"
 key = "6658dd0583867ea9940291ef/2024-08-07_1105.jpg"
@@ -27,7 +30,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Create a ConfigParser object
-config = configparser.ConfigParser()
+config = ConfigParser()
 
 # Read the .cfg file
 config.read('/home/ubuntu/aws_key.cfg')
@@ -43,9 +46,6 @@ session = boto3.Session(
 )
 config = BotoConfig(connect_timeout=120, read_timeout=300, retries={"max_attempts": 5, "mode": "standard"})
 s3 = session.client('s3', config=config, verify=False)
-
-plant_pixels, MayHavePlant = calculate_area(key)
-print(plant_pixels, MayHavePlant)
 
 def calculate_area(key: str):
     # Get the image object from S3
@@ -74,9 +74,6 @@ def calculate_area(key: str):
         print(f"ResponseStreamingError for {key}")
         return 0
     image_np = np.array(image)
-    #load in image
-    #using skimage for file import since cv2 wasn't working
-    image_np = io.imread(str(filename))
 
     # Convert to HSV and LAB color spaces
     #HSV - Hue, Seperation, Value
@@ -124,7 +121,7 @@ def calculate_area(key: str):
 
     #export masked and denoised image to file
     #cv2 only works with strings, not filepaths
-    masked_image_path = str(mask_folder / f"{filename.stem}_mask_plantpixels_{plant_pixels}_mayhaveplant_{MayHavePlant}_nplants_{number_of_plants}.jpg")
+    masked_image_path = str(image_folder / f"{filename.stem}_mask_plantpixels_{plant_pixels}_mayhaveplant_{MayHavePlant}_nplants_{number_of_plants}.jpg")
     cv2.imwrite(masked_image_path, denoised_mask)
 
 
@@ -132,8 +129,5 @@ def calculate_area(key: str):
     # For demonstration, let's just return the number of white pixels in the mask
     return plant_pixels, MayHavePlant
 
-
-
-
-
-    
+plant_pixels, MayHavePlant = calculate_area(key)
+print(plant_pixels, MayHavePlant)

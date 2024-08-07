@@ -9,7 +9,7 @@ detect_plant()
     conda activate imageprocessing_minimal
 
     #script test inputs
-    local outputs_superfolder="/mnt/stor/ceph/csb/marsfarm/projects/s3_lambda_test/outputs"
+    local outputs_superfolder="~/marsfarm-imageprocessing/outputs"
 
     #shows you what node jupyter lab is running on
     python3 single_plant_test.py $outputs_superfolder
