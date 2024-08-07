@@ -18,6 +18,7 @@ from botocore.exceptions import ClientError, ResponseStreamingError
 from PIL import Image, UnidentifiedImageError, ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 from io import BytesIO
+from time import time
 
 outputs_folder = Path(sys.argv[1])
 
@@ -109,7 +110,7 @@ def calculate_area(key: str):
 
     #count the number of nonzero pixels, determine if > 110k
     plant_pixels = cv2.countNonZero(denoised_mask)
-    MayHavePlant = bool(plant_pixels > 110000)
+    MayHavePlant = int(bool(plant_pixels > 110000))
 
     #create labels for masks that may have plants, count number of objects
     number_of_plants = 0
@@ -121,13 +122,50 @@ def calculate_area(key: str):
 
     #export masked and denoised image to file
     #cv2 only works with strings, not filepaths
-    masked_image_path = str(image_folder / f"{filename.stem}_mask_plantpixels_{plant_pixels}_mayhaveplant_{MayHavePlant}_nplants_{number_of_plants}.jpg")
-    cv2.imwrite(masked_image_path, denoised_mask)
+    #masked_image_path = str(image_folder / f"2024-08-07_1105_mask_plantpixels_{plant_pixels}_mayhaveplant_{MayHavePlant}.jpg")
+    #cv2.imwrite(masked_image_path, denoised_mask)
 
 
     # Here, you might want to save or further process the result_image
     # For demonstration, let's just return the number of white pixels in the mask
     return plant_pixels, MayHavePlant
 
+def set_tag(tag_set, key_name: str, key_value: int):
+    # Iterate over the tag set to find the 'mayhaveplant' tag
+    for tag in tag_set:
+        if tag['Key'] == key_name:
+            tag['Value'] = str(key_value)
+            break
+    else:
+        # If no break was encountered, it means the tag was not found
+        tag_set.append({'Key': key_name, 'Value': str(key_value)})  # Add the tag
+    return tag_set 
+
+def set_tag_mayhaveplant(mayhaveplant: bool, plant_pixels: int, key: str):
+        #First, add or set tag in bucket
+        try:
+            current_tags = s3.get_object_tagging(Bucket=bucket_name, Key=key)
+            tag_set = current_tags['TagSet']              
+        except ClientError as error:
+            if error.response['Error']['Code'] == 'NoSuchTagSet': tag_set = []
+            else: raise
+        
+        #print(tag_set)
+        tag_set = set_tag(tag_set, 'MayHavePlant', mayhaveplant)
+        tag_set = set_tag(tag_set, 'PlantPixels', plant_pixels)    
+        #print(tag_set)
+
+        # Apply the updated tag set to the bucket
+        s3.put_object_tagging(
+            Bucket=bucket_name,
+            Key=key,
+            Tagging={
+                'TagSet': tag_set
+            }
+        )
+
+start_time = time()
 plant_pixels, MayHavePlant = calculate_area(key)
-print(plant_pixels, MayHavePlant)
+print(time() - start_time)
+set_tag_mayhaveplant(MayHavePlant, plant_pixels, key)
+print(time() - start_time)
