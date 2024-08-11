@@ -84,6 +84,8 @@ for response in responses:
         
 print("tokens acquired")
 print(len(keys))
+key_set = set(keys)
+print(len(key_set))
 print(time() - start_time)
 sys.exit()
 
