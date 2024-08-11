@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #make sure you are in the same directory as this file when running it
-detect_plant()
+full_bucket_workflow()
 {(
     set -Eeo pipefail
     # ACTIVATE ANACONDA
@@ -12,9 +12,9 @@ detect_plant()
     local outputs_superfolder="/home/ubuntu/marsfarm-imageprocessing/outputs"
 
     #shows you what node jupyter lab is running on
-    python3 single_plant_test.py $outputs_superfolder
+    python3 full_bucket_workflow.py $outputs_superfolder
 )}
 
-export -f detect_plant
+export -f full_bucket_workflow
 
-detect_plant
+full_bucket_workflow
