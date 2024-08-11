@@ -49,6 +49,7 @@ session = boto3.Session(
 config = BotoConfig(connect_timeout=120, read_timeout=300, retries={"max_attempts": 5, "mode": "standard"})
 s3 = session.client('s3', config=config, verify=False)
 
+start_time = time()
 def list_keys(continuation_token=None):
     if continuation_token:
         response = s3.list_objects_v2(Bucket=bucket_name, ContinuationToken=continuation_token)
@@ -58,28 +59,17 @@ def list_keys(continuation_token=None):
 
 keys = []
 continuation_token = None
-tasks = []
 
-start_time = time()
-# Fetch the first batch to initialize the list of tasks
-response = list_keys()
-keys.extend([obj['Key'] for obj in response.get('Contents', [])])
-
-# If there are more objects to fetch, create a list of continuation tokens
-while response.get('IsTruncated'):
-    continuation_token = response.get('NextContinuationToken')
-    tasks.append(continuation_token)
+while True:
     response = list_keys(continuation_token)
+
+    # Append keys to the list
     keys.extend([obj['Key'] for obj in response.get('Contents', [])])
 
-# Use ThreadPoolExecutor to run list_keys concurrently for each continuation token
-with ThreadPoolExecutor() as executor:
-    # Map tasks to the executor; the result will automatically be gathered
-    responses = executor.map(lambda token: list_keys(token), tasks)
-
-# Process each response
-for response in responses:
-    keys.extend([obj['Key'] for obj in response.get('Contents', [])])
+    if response.get('IsTruncated'):
+        continuation_token = response.get('NextContinuationToken')
+    else:
+        break
 
         
 print("tokens acquired")
