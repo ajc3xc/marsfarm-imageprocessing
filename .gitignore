@@ -168,3 +168,6 @@ outputs/
 **/*.cfg
 *.cfg
 **/.ipynb_checkpoints
+**/logs
+**/processed_keys.txt
+*.txt
