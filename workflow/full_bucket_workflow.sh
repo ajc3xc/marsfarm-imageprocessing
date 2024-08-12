@@ -8,8 +8,8 @@ full_bucket_workflow()
     eval "$(conda shell.bash hook)"
     conda activate imageprocessing_minimal
 
-    #script test inputs
-    local outputs_superfolder="/home/ubuntu/marsfarm-imageprocessing/outputs"
+    #where the current processed keys are stored
+    local logs_folder="/home/ubuntu/marsfarm-imageprocessing/logs"
 
     #shows you what node jupyter lab is running on
     python3 full_bucket_workflow.py $outputs_superfolder

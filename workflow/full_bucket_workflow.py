@@ -20,7 +20,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 from io import BytesIO
 from time import time
 
-outputs_folder = Path(sys.argv[1])
+logs_folder = Path(sys.argv[1])
+logs_folder.mkdir(exist_ok=True)
 
 bucket_name = "mv1-production"
 key = "6658dd0583867ea9940291ef/2024-08-07_1105.jpg"
@@ -76,7 +77,7 @@ print("tokens acquired")
 processed_keys_set = set()
 
 # read in key file if it exists, otherwise do empty set
-key_file = outputs_folder / "processed_keys.txt"
+key_file = logs_folder / "processed_keys.txt"
 if key_file.exists():
     with open(key_file, 'r') as file:
             # Read all lines at once and strip any leading/trailing whitespace
