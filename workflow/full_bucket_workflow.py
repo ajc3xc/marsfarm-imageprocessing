@@ -77,11 +77,14 @@ print("tokens acquired")
 processed_keys_set = set()
 
 # read in key file if it exists, otherwise do empty set
-key_file = logs_folder / "processed_keys.txt"
-if key_file.exists():
-    with open(key_file, 'r') as file:
+processed_keys_file = logs_folder / "processed_keys.txt"
+if processed_keys_file.exists():
+    with open(processed_keys_file, 'r') as file:
             # Read all lines at once and strip any leading/trailing whitespace
             processed_keys_set = set(line.strip() for line in file if line.strip())
+else:
+    with open(processed_keys_file, 'w') as file:
+        pass
 
 total_key_set = set(jpg_keys)
 new_key_set = list(total_key_set - processed_keys_set)
@@ -197,6 +200,6 @@ def set_tag_if_absent(tag_set, key_name: str, key_value: int):
 start_time = time()
 print("Processing images...")
 # Parallel processing
-with ThreadPoolExecutor() as executor:
+with ProcessPoolExecutor() as executor:
     executor.map(process_and_tag_image, new_key_set)
 print(f"Image processing time: {time() - start_time} seconds")
