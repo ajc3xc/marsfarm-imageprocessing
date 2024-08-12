@@ -29,7 +29,7 @@ key = "6658dd0583867ea9940291ef/2024-08-07_1105.jpg"
 #haha, I have no idea!
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 # Create a ConfigParser object
 config = ConfigParser()
@@ -49,8 +49,9 @@ session = boto3.Session(
 config = BotoConfig(connect_timeout=120, read_timeout=300, retries={"max_attempts": 5, "mode": "standard"})
 s3 = session.client('s3', config=config, verify=False)
 
-start_time = time()
 
+print("Fetching all keys...")
+start_time = time()
 jpg_keys = []
 continuation_token = None
 
@@ -62,8 +63,7 @@ while True:
         response = s3.list_objects_v2(Bucket=bucket_name)
 
     # Filter keys to include only those ending with .jpg
-    keys = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('.jpg')]
-    jpg_keys.extend(keys)
+    jpg_keys.extend([obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('.jpg')])
 
     # Check if more results are available (pagination)
     continuation_token = response.get('NextContinuationToken')
@@ -71,138 +71,131 @@ while True:
         break
         
 print("tokens acquired")
-key_file = outputs_folder / "unique_s3_keys.txt"
-print(len(keys))
-key_set = set(jpg_keys)
-print(len(key_set))
-print(jpg_keys[0])
-print(time() - start_time)
 
-# Export unique keys to a .txt file all at once
-with open(key_file, 'w') as txt_file:
-    # Join the keys with a newline character and write them at once
-    txt_file.write('\n'.join(jpg_keys) + '\n')
-print(time() - start_time)
-sys.exit()
+#have empty set if file doesn't exist
+processed_keys_set = set()
 
-def calculate_area(key: str):
-    # Get the image object from S3
-    image_folder = outputs_folder / "images" / Path(key).stem
-    image_folder.mkdir(exist_ok=True, parents=True)
-    s3_object = s3.get_object(Bucket=bucket_name, Key=key)    
-    #read image into numpy array
-    #If you can't read it return 0
+# read in key file if it exists, otherwise do empty set
+key_file = outputs_folder / "processed_keys.txt"
+if key_file.exists():
+    with open(key_file, 'r') as file:
+            # Read all lines at once and strip any leading/trailing whitespace
+            processed_keys_set = set(line.strip() for line in file if line.strip())
+
+total_key_set = set(jpg_keys)
+new_key_set = list(total_key_set - processed_keys_set)
+print(f"New images to process: {len(new_key_set)}")
+if len(new_key_set) == 0:
+    print("No new images to process")
+    sys.exit()
+print("Key collection & filtering time: ", time() - start_time)
+
+# Add key to processed keys file
+def add_key_to_processed_keys_file(key: str):
+    with open(processed_keys_file, 'a') as f:
+        f.write(f"{key}\n")
+
+def process_and_tag_image(key: str):
     try:
+        # Get current tags
+        current_tags = s3.get_object_tagging(Bucket=bucket_name, Key=key)
+        tag_set = current_tags['TagSet']
+
+        # Check if both tags already exist
+        tags_present = {tag['Key']: tag['Value'] for tag in tag_set}
+        if 'MayHavePlant' in tags_present and 'PlantPixels' in tags_present:
+            print(f"Skipping {key} - already processed")
+            add_key_to_processed_keys_file(key)
+            return
+
+    except ClientError as error:
+        if error.response['Error']['Code'] == 'NoSuchTagSet':
+            tag_set = []
+        else:
+            print(f"Error fetching tags for {key}: {error}")
+            return
+
+    try:
+        # Get the image object from S3
+        s3_object = s3.get_object(Bucket=bucket_name, Key=key)
+        
+        # Read image into numpy array
         img_data = BytesIO()
-        # Download the file in chunks
         for chunk in s3_object['Body'].iter_chunks(chunk_size=4096):
             img_data.write(chunk)
-
-        # Ensure the beginning of the file is at the start
         img_data.seek(0)
         image = Image.open(img_data)
-    #So many ways to fail, so little time
-    except UnidentifiedImageError as e:
+
+        # Convert to numpy array
+        image_np = np.array(image)
+
+        # Convert to HSV and LAB color spaces
+        hsv_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2HSV)
+        lab_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2LAB)
+
+        # Define HSV and LAB range for filtering
+        hsv_min = np.array([int(28/2), int(20/100*255), int(20/100*255)])
+        hsv_max = np.array([int(144/2), 255, 255])
+        hsv_mask = cv2.inRange(hsv_image, hsv_min, hsv_max)
+
+        lab_lower = np.array([int(10/100*255), 0, 132])
+        lab_upper = np.array([int(90/100*255), 124, 255])
+        lab_mask = cv2.inRange(lab_image, lab_lower, lab_upper)
+
+        # Combine the masks and apply to the original image
+        combined_mask = cv2.bitwise_and(hsv_mask, lab_mask)
+
+        # Cast binary image to boolean
+        bool_mask = combined_mask.astype(bool)
+
+        # Find and fill contours less than 500 in area
+        bool_mask = morphology.remove_small_objects(bool_mask, 1000)
+
+        # Cast boolean image to binary
+        denoised_mask = np.copy(bool_mask.astype(np.uint8) * 255)
+
+        # Count the number of nonzero pixels
+        plant_pixels = cv2.countNonZero(denoised_mask)
+        MayHavePlant = int(bool(plant_pixels > 110000))
+
+    except UnidentifiedImageError:
         print(f"{key} won't load")
-        return 0
-    except urllib3.exceptions.SSLError:
-        print(f"SSL failed for {key}")
-        return 0
-    except ResponseStreamingError as e:
-        print(f"ResponseStreamingError for {key}")
-        return 0
-    image_np = np.array(image)
+        return
+    except Exception as e:
+        print(f"Error processing {key}: {e}")
+        return
 
-    # Convert to HSV and LAB color spaces
-    #HSV - Hue, Seperation, Value
-    #LAB - Lightness, red-green, blue-yellow
-    hsv_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2HSV)
-    lab_image = cv2.cvtColor(image_np, cv2.COLOR_BGR2LAB)
+    # Add or set the tags if they don't exist
+    tag_set = set_tag_if_absent(tag_set, 'MayHavePlant', MayHavePlant)
+    tag_set = set_tag_if_absent(tag_set, 'PlantPixels', plant_pixels)
 
-    # Define HSV range for filtering using OpenCV
-    # OpenCV uses 0-180 for Hue, so the values are halved
-    hsv_min = np.array([int(28/2), int(20/100*255), int(20/100*255)])
-    hsv_max = np.array([int(144/2), 255, 255])
-    hsv_mask = cv2.inRange(hsv_image, hsv_min, hsv_max)
+    # Apply the updated tag set to the S3 object
+    s3.put_object_tagging(
+        Bucket=bucket_name,
+        Key=key,
+        Tagging={
+            'TagSet': tag_set
+        }
+    )
 
-    # Define LAB range for filtering using OpenCV
-    # OpenCV uses 0-255 for L, a*, and b*
-    # Note: 'a' and 'b' ranges need to be shifted from [-128, 127] to [0, 255]
-    # L is scaled from [0, 100] in LAB to [0, 255] in OpenCV
-    lab_lower = np.array([int(10/100*255), 0, 132])
-    lab_upper = np.array([int(90/100*255), 124, 255])
-    lab_mask = cv2.inRange(lab_image, lab_lower, lab_upper)
+    # Append the processed key to the file
+    add_key_to_processed_keys_file(key)
+    print(f"Processed {key}")
+    
 
-    # Combine the masks (logical AND) and apply to the original image
-    combined_mask = cv2.bitwise_and(hsv_mask, lab_mask)
-
-    # Cast binary image to boolean
-    bool_mask = combined_mask.astype(bool)
-
-    # Find and fill contours less than 500 in area
-    bool_mask = morphology.remove_small_objects(bool_mask, 1000)
-
-    # Cast boolean image to binary and make a copy of the binary image for returning
-    denoised_mask = np.copy(bool_mask.astype(np.uint8) * 255)
-
-    #count the number of nonzero pixels, determine if > 110k
-    plant_pixels = cv2.countNonZero(denoised_mask)
-    MayHavePlant = int(bool(plant_pixels > 110000))
-
-    #create labels for masks that may have plants, count number of objects
-    number_of_plants = 0
-    #if MayHavePlant:
-        #labeled_mask = label(denoised_mask, connectivity=1)  # You can adjust connectivity (1 or 2)
-
-        # Find the number of objects by ignoring the background (label 0)
-       # number_of_plants = len(np.unique(labeled_mask)) - 1  # Subtract one for the background label
-
-    #export masked and denoised image to file
-    #cv2 only works with strings, not filepaths
-    #masked_image_path = str(image_folder / f"2024-08-07_1105_mask_plantpixels_{plant_pixels}_mayhaveplant_{MayHavePlant}.jpg")
-    #cv2.imwrite(masked_image_path, denoised_mask)
-
-
-    # Here, you might want to save or further process the result_image
-    # For demonstration, let's just return the number of white pixels in the mask
-    return plant_pixels, MayHavePlant
-
-def set_tag(tag_set, key_name: str, key_value: int):
-    # Iterate over the tag set to find the 'mayhaveplant' tag
+def set_tag_if_absent(tag_set, key_name: str, key_value: int):
+    # Check if the tag is already present
     for tag in tag_set:
         if tag['Key'] == key_name:
-            tag['Value'] = str(key_value)
-            break
-    else:
-        # If no break was encountered, it means the tag was not found
-        tag_set.append({'Key': key_name, 'Value': str(key_value)})  # Add the tag
-    return tag_set 
+            return tag_set  # Tag already exists, no need to add
+    # Add the tag if it wasn't found
+    tag_set.append({'Key': key_name, 'Value': str(key_value)})
+    return tag_set
 
-def set_tag_mayhaveplant(mayhaveplant: bool, plant_pixels: int, key: str):
-        #First, add or set tag in bucket
-        try:
-            current_tags = s3.get_object_tagging(Bucket=bucket_name, Key=key)
-            tag_set = current_tags['TagSet']              
-        except ClientError as error:
-            if error.response['Error']['Code'] == 'NoSuchTagSet': tag_set = []
-            else: raise
-        
-        #print(tag_set)
-        tag_set = set_tag(tag_set, 'MayHavePlant', mayhaveplant)
-        tag_set = set_tag(tag_set, 'PlantPixels', plant_pixels)    
-        #print(tag_set)
-
-        # Apply the updated tag set to the bucket
-        s3.put_object_tagging(
-            Bucket=bucket_name,
-            Key=key,
-            Tagging={
-                'TagSet': tag_set
-            }
-        )
-
+# Example usage:
 start_time = time()
-plant_pixels, MayHavePlant = calculate_area(key)
-print(time() - start_time)
-set_tag_mayhaveplant(MayHavePlant, plant_pixels, key)
-print(time() - start_time)
+print("Processing images...")
+# Parallel processing
+with ThreadPoolExecutor() as executor:
+    executor.map(process_and_tag_image, new_key_set)
+print(f"Image processing time: {time() - start_time} seconds")
