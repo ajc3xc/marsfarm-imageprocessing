@@ -50,32 +50,38 @@ config = BotoConfig(connect_timeout=120, read_timeout=300, retries={"max_attempt
 s3 = session.client('s3', config=config, verify=False)
 
 start_time = time()
-def list_keys(continuation_token=None):
+
+jpg_keys = []
+continuation_token = None
+
+while True:
+    # List objects with an optional prefix (e.g., 'images/')
     if continuation_token:
         response = s3.list_objects_v2(Bucket=bucket_name, ContinuationToken=continuation_token)
     else:
         response = s3.list_objects_v2(Bucket=bucket_name)
-    return response
 
-keys = []
-continuation_token = None
+    # Filter keys to include only those ending with .jpg
+    keys = [obj['Key'] for obj in response.get('Contents', []) if obj['Key'].endswith('.jpg')]
+    jpg_keys.extend(keys)
 
-while True:
-    response = list_keys(continuation_token)
-
-    # Append keys to the list
-    keys.extend([obj['Key'] for obj in response.get('Contents', [])])
-
-    if response.get('IsTruncated'):
-        continuation_token = response.get('NextContinuationToken')
-    else:
+    # Check if more results are available (pagination)
+    continuation_token = response.get('NextContinuationToken')
+    if not continuation_token:
         break
-
         
 print("tokens acquired")
+key_file = outputs_folder / "unique_s3_keys.txt"
 print(len(keys))
-key_set = set(keys)
+key_set = set(jpg_keys)
 print(len(key_set))
+print(jpg_keys[0])
+print(time() - start_time)
+
+# Export unique keys to a .txt file all at once
+with open(key_file, 'w') as txt_file:
+    # Join the keys with a newline character and write them at once
+    txt_file.write('\n'.join(jpg_keys) + '\n')
 print(time() - start_time)
 sys.exit()
 
