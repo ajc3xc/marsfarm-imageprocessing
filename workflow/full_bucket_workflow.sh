@@ -12,7 +12,7 @@ full_bucket_workflow()
     local logs_folder="/home/ubuntu/marsfarm-imageprocessing/logs"
 
     #shows you what node jupyter lab is running on
-    python3 full_bucket_workflow.py $outputs_superfolder
+    python3 full_bucket_workflow.py $logs_folder
 )}
 
 export -f full_bucket_workflow
